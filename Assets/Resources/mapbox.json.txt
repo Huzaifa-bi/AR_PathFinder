@@ -1,0 +1,7 @@
+{
+  "AccessToken": "pk.YOUR_REAL_MAPBOX_TOKEN_HERE",
+  "MemoryCacheSize": 500,
+  "FileCacheSize": 0,
+  "DefaultTimeout": 30,
+  "AutoRefreshCache": false
+}
