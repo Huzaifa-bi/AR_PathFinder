@@ -77,6 +77,15 @@ namespace ARLocation.MapboxRoutes.SampleProject
         /// <summary>Call when the route needs to be recalculated.</summary>
         public void SpeakRecalculating() => Speak("Recalculating");
 
+        /// <summary>Call when the user leaves the path.</summary>
+        public void SpeakOffRoute(float metersOff)
+        {
+            if (metersOff >= 20f)
+                Speak("You are off route. Recalculating.");
+            else
+                Speak("You left the path. Return to the white arrows.");
+        }
+
         // ── Core speak (with cooldown to prevent overlap) ────────────────────
 
         public void Speak(string text)

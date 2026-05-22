@@ -275,12 +275,19 @@ namespace ARLocation.MapboxRoutes
             var MapPinContainer = FinishSignSettings.Container;
             var groundHeight = args.Route.Settings.GroundHeight;
 
+            // World-space TMP board is unreliable in AR (culling, pitch). Instructions are shown on
+            // ARNavigationUI’s screen-locked center card; keep GuideContainer off but update its transform
+            // for MapPin / layout math.
+            if (SignContainer != null && SignContainer.gameObject.activeSelf)
+                SignContainer.gameObject.SetActive(false);
+
             var relative = args.TargetPos - args.UserPos;
             relative.y = 0;
             var dir = relative.normalized;
 
             transform.position = args.TargetPos;
-            Utils.Misc.SetTransformPositionY(transform, 0);
+            float groundY = ResolveGroundY(args);
+            Utils.Misc.SetTransformPositionY(transform, groundY);
 
             if (ArrowContainer != null && ArrowContainer.gameObject.activeSelf)
             {
@@ -290,8 +297,9 @@ namespace ARLocation.MapboxRoutes
                 }
 
                 float amp = 0.2f;
-                var dropY = SignContainer == null ? RoadSignSettings.Height : SignContainer.transform.position.y;
-                DropAndFloatUpdate(ArrowContainer.transform, arrowTime, dropY, Camera.main.transform.position.y, 2.0f, amp, 0.3f, 0.1f, 0.02f);
+                float dropY = groundY + 2.5f;
+                float landY = groundY + 0.08f;
+                DropAndFloatUpdate(ArrowContainer.transform, arrowTime, dropY, landY, 2.0f, amp, 0.3f, 0.1f, 0.02f);
                 arrowTime += Time.deltaTime;
 
                 // Point it to the next target, if there is one
@@ -314,8 +322,7 @@ namespace ARLocation.MapboxRoutes
                 case StateType.Following:
                     if (SignContainer != null)
                     {
-                        SignContainer.transform.position = MathUtils.SetY(args.UserPos, 0) + L0 * dir;
-                        SignContainer.transform.forward = dir;
+                        SignContainer.transform.position = MathUtils.SetY(args.UserPos, groundY) + L0 * dir;
                     }
                     break;
 
@@ -343,23 +350,29 @@ namespace ARLocation.MapboxRoutes
                     break;
             }
 
-            if (SignContainer != null)
+            if (SignContainer != null && Camera.main != null)
             {
-                Utils.Misc.SetTransformPositionY(SignContainer.transform, Camera.main.transform.position.y + RoadSignSettings.Height);
+                float targetH = Camera.main.transform.position.y + RoadSignSettings.Height;
+                Utils.Misc.SetTransformPositionY(SignContainer.transform, targetH);
             }
 
             if (state.Type != StateType.Hidden)
             {
                 if (RoadSignSettings.DistanceLabel != null)
-                {
                     RoadSignSettings.DistanceLabel.text = $"{args.Distance.ToString("0")} m";
-                }
-
                 if (RoadSignSettings.DirectionLabel != null)
-                {
                     RoadSignSettings.DirectionLabel.text = args.Instruction;
-                }
             }
+        }
+
+        static float ResolveGroundY(SignPostEventArgs args)
+        {
+            if (ARLocationManager.Instance != null)
+            {
+                float gy = ARLocationManager.Instance.CurrentGroundY;
+                if (gy > -500f) return gy;
+            }
+            return args.TargetPos.y;
         }
 
         public static float EaseOutCubic(float start, float end, float value)

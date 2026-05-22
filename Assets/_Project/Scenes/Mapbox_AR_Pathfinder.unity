@@ -629,6 +629,9 @@ GameObject:
   - component: {fileID: 266481003}
   - component: {fileID: 266481005}
   - component: {fileID: 266481004}
+  - component: {fileID: 266481006}
+  - component: {fileID: 266481007}
+  - component: {fileID: 266481008}
   m_Layer: 0
   m_Name: Menu Controller
   m_TagString: Untagged
@@ -663,7 +666,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b127c2bd022164116959cdf067a64c5a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MapboxToken: YOUR_MAPBOX_TOKEN
+  MapboxToken: YOUR_MAPBOX_TOKEN_HERE
   ARCameraManager: {fileID: 0}
   ARPlaneManager: {fileID: 0}
   ARRaycastManager: {fileID: 0}
@@ -675,12 +678,9 @@ MonoBehaviour:
   NextTargetPathRenderer: {fileID: 266481005}
   RenderTexture: {fileID: 8400000, guid: f3cd5103645304a6da460eb8329221e4, type: 2}
   Map: {fileID: 1068750569}
-  MapSize: 420
-  DirectionsFactory: {fileID: 0}
   MinimapLayer: 6
   MinimapLineMaterial: {fileID: 2100000, guid: 5a66f28d8726243dba9094b33505fec6, type: 2}
   BaseLineWidth: 3
-  MinimapStepSize: 0.75
 --- !u!114 &266481004
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -688,14 +688,30 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 266481001}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fc0aadb6b1ad64fba9d3df3e2d3d875f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   Settings:
     LineMaterial: {fileID: 2100000, guid: 697c3d00ed75e4c388f1112e6817fa65, type: 2}
+    PathWidth: 1.15
 --- !u!114 &266481005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 266481001}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b3d4565e2fba5454e885ee85e49be2dc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  Settings:
+    LineMaterial: {fileID: 2100000, guid: 697c3d00ed75e4c388f1112e6817fa65, type: 2}
+    TextureOffsetFactor: -4
+--- !u!114 &266481006
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -704,12 +720,46 @@ MonoBehaviour:
   m_GameObject: {fileID: 266481001}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b3d4565e2fba5454e885ee85e49be2dc, type: 3}
+  m_Script: {fileID: 11500000, guid: ab2527bdaac8a5641955be5842983ccb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Settings:
-    LineMaterial: {fileID: 2100000, guid: 697c3d00ed75e4c388f1112e6817fa65, type: 2}
-    TextureOffsetFactor: -4
+  ChevronSpacing: 2.5
+  ChevronSize: 0.9
+  MaxChevrons: 32
+  MaxChevronDistanceM: 38
+  TurnMarkerShowWithinM: 42
+  TurnMarkerScale: 1.35
+--- !u!114 &266481007
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 266481001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 33161422aafe26e4989e069a987a62c8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  PositionLowPass: 0.08
+  MaxHorizontalAccuracyM: 35
+  UseKalmanFilter: 1
+  CompassLowPass: 0.88
+  UseProviderHeading: 1
+--- !u!114 &266481008
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 266481001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 00e3f50e750b2f24cb43044752709b54, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ShowOverlay: 1
+  ToggleKey: 282
 --- !u!21 &297963118
 Material:
   serializedVersion: 8
@@ -887,7 +937,7 @@ MonoBehaviour:
     - {fileID: 2406714923471210871, guid: 154e5264001534d7999c9720b114562d, type: 3}
     PathRenderer: {fileID: 0}
     OnScreenIndicator: {fileID: 431329722}
-    MapboxToken: YOUR_MAPBOX_TOKEN
+    MapboxToken: YOUR_MAPBOX_TOKEN_HERE
     RouteSettings:
       RouteType: 0
       From:
@@ -909,8 +959,9 @@ MonoBehaviour:
           Label: 
         Query: 
       CustomRoute: {fileID: 0}
-    LoadRouteAtStartup: 1
+    LoadRouteAtStartup: 0
     GroundHeight: 1.4
+    EnableSignpostBehaviour: 0
     OnMapboxRouteLoadError:
       m_PersistentCalls:
         m_Calls: []
@@ -937,7 +988,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 431329717}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1c04fa4e0641a427587f656c768c3002, type: 3}
   m_Name: 
@@ -1712,14 +1763,13 @@ GameObject:
   - component: {fileID: 889112050}
   - component: {fileID: 889112049}
   - component: {fileID: 889112048}
-  - component: {fileID: 889112047}
   m_Layer: 5
   m_Name: ArMenuCanvas
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &889112046
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1746,37 +1796,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 0}
---- !u!114 &889112047
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 889112045}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 76e24f341c4fa48cfa9c523ed0b54758, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  Settings:
-    MapboxRoute: {fileID: 431329718}
-    MenuController: {fileID: 266481003}
-    TransitionSpeed: 2
-  Elements:
-    BtnToggle: {fileID: 705669011}
-    BtnNext: {fileID: 2118337107}
-    BtnPrev: {fileID: 2005210163}
-    BtnRestart: {fileID: 1074844349}
-    BtnExit: {fileID: 1020380127}
-    BtnLineRender: {fileID: 154292251}
-    LabelNext: {fileID: 834769796}
-    LabelPrev: {fileID: 756259261}
-    LabelRestart: {fileID: 923701450}
-    LabelSearch: {fileID: 1343864087}
-    LabelTargetRender: {fileID: 261514142}
-    TargetNext: {fileID: 1011265764}
-    TargetPrev: {fileID: 1463163021}
-    TargetRestart: {fileID: 1068381031}
 --- !u!114 &889112048
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1951,7 +1970,6 @@ Transform:
   - {fileID: 431329719}
   - {fileID: 1945186896}
   - {fileID: 889112046}
-  - {fileID: 1320254537}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1011265763
@@ -2252,8 +2270,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _options:
     locationOptions:
-      latitudeLongitude: 33.6535685271511, 73.25870025137
-      zoom: 15.1
+      latitudeLongitude: 33.65598735240187, 73.2649697331715
+      zoom: 16
     extentOptions:
       extentType: 0
       defaultExtents:
@@ -2495,9 +2513,9 @@ MonoBehaviour:
         _maskValue: 0
         selectedTypes: 
       locationPrefabList: []
-  _tileProvider: {fileID: 1569458838}
+  _tileProvider: {fileID: 0}
   _previewOptions:
-    isPreviewEnabled: 1
+    isPreviewEnabled: 0
 --- !u!4 &1068750570
 Transform:
   m_ObjectHideFlags: 0
@@ -2510,8 +2528,7 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 1569458839}
+  m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1074844347
@@ -2769,7 +2786,7 @@ GameObject:
   - component: {fileID: 1217169227}
   m_Layer: 0
   m_Name: Camera
-  m_TagString: MainCamera
+  m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -3008,7 +3025,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 955660338}
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1343864086
 GameObject:
@@ -3339,7 +3356,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6e5e11077e489453a9cbcfff72c5a9c5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MaxNumberOfUpdates: 4
+  MaxNumberOfUpdates: 0
   AverageCount: 150
   UseRawUntilFirstAverage: 1
   MovementSmoothingFactor: 0.015
@@ -3557,54 +3574,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1553892338}
   m_CullTransparentMesh: 0
---- !u!1 &1569458837
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1569458839}
-  - component: {fileID: 1569458838}
-  m_Layer: 0
-  m_Name: TileProvider
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1569458838
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1569458837}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 756a01a914208439d8d2fc8dcd68b229, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _cbtpOptions:
-    camera: {fileID: 1812803367}
-    visibleBuffer: 0
-    disposeBuffer: 0
---- !u!4 &1569458839
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1569458837}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 1068750570}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1576971334
 GameObject:
   m_ObjectHideFlags: 0
@@ -4966,6 +4935,7 @@ SceneRoots:
   m_Roots:
   - {fileID: 1267014654}
   - {fileID: 1217169229}
+  - {fileID: 1320254537}
   - {fileID: 266481002}
   - {fileID: 1706308437}
   - {fileID: 168167785}

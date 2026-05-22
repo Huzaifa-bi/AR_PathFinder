@@ -13,6 +13,9 @@ namespace ARLocation.MapboxRoutes
     {
         public string AccessToken;
 
+        /// <summary>Mapbox routing profile: driving, walking, cycling, etc.</summary>
+        public string DirectionsProfile = "walking";
+
         private RouteResponse queryRouteResult;
         public RouteResponse QueryRouteResult => queryRouteResult;
 
@@ -104,7 +107,8 @@ namespace ARLocation.MapboxRoutes
                 yield break;
             }
             
-            string url = $"https://api.mapbox.com/directions/v5/mapbox/walking/{fromLon},{fromLat};{toLon},{toLat}?alternatives={alt}&geometries=geojson&steps=true&access_token={AccessToken}";
+            var profile = string.IsNullOrEmpty(DirectionsProfile) ? "walking" : DirectionsProfile;
+            string url = $"https://api.mapbox.com/directions/v5/mapbox/{profile}/{fromLon},{fromLat};{toLon},{toLat}?alternatives={alt}&geometries=geojson&steps=true&access_token={AccessToken}";
             
             errorMessage = null;
             queryRouteResult = null;

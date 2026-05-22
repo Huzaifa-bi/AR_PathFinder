@@ -22,6 +22,13 @@ using UnityEngine.EventSystems;
 /// </summary>
 namespace ARLocation.MapboxRoutes.SampleProject
 {
+    public enum RouteDeviationLevel
+    {
+        None = 0,
+        Warning = 1,
+        Recalculating = 2
+    }
+
     public class ARNavigationUI : MonoBehaviour
     {
         // ── Google Maps Dark Color Palette ───────────────────────────────────
@@ -34,17 +41,31 @@ namespace ARLocation.MapboxRoutes.SampleProject
         static readonly Color C_TextHi   = new Color(0.940f, 0.940f, 0.940f, 1.00f); // near-white
         static readonly Color C_TextLo   = new Color(0.600f, 0.600f, 0.650f, 1.00f); // muted
         static readonly Color C_Divider  = new Color(1.000f, 1.000f, 1.000f, 0.07f); // thin line
+        /// <summary>Screen-locked AR “stat” card (replaces unreliable world-space sign board).</summary>
+
+        /// <summary>Fraction of safe-area height for the top instruction strip (compact chrome).</summary>
+        const float NavTopBand = 0.125f;
+        /// <summary>Fraction of safe-area height for the bottom destination sheet.</summary>
+        const float NavBottomBand = 0.22f;
 
         // ── Public Events (MenuController subscribes to these) ───────────────
         public event Action<string> OnSearchRequested;
         public event Action<int>    OnLocationSelected;
         public event Action<int>    OnSearchResultSelected;
         public event Action         OnEndNavigation;
+        public event Action<string> OnSearchTextChanged;  // live filtering as user types
+        /// <summary>User confirmed route on 2D map — start AR guidance, chevrons, live nav.</summary>
+        public event Action         OnStartARNavigation;
+        /// <summary>Leave route preview without starting AR.</summary>
+        public event Action         OnCancelRoutePreview;
+        /// <summary>User requests a new walking route from current GPS to the same destination.</summary>
+        public event Action         OnRerouteRequested;
 
         // ── Internal UI References ───────────────────────────────────────────
         Canvas      _canvas;
         GameObject  _searchScreen;
         GameObject  _navScreen;
+        GameObject  _routePreviewScreen;
 
         // Search screen
         InputField  _searchInput;
@@ -60,12 +81,30 @@ namespace ARLocation.MapboxRoutes.SampleProject
         Text        _destText;
         Text        _distText;
         Text        _etaText;
+        Text        _navGuideFooter;
+        Button      _rerouteBtn;
         RawImage    _minimapImg;
+        RectTransform _minimapPanelRt;
+        RectTransform _minimapImgRt;
+        AspectRatioFitter _minimapAspectFitter;
+        RectTransform _navBannerRt;
+        RectTransform _navCardRt;
+        GameObject _offRouteBanner;
+        Text _offRouteTitle;
+        Text _offRouteDetail;
+        RouteDeviationLevel _deviationLevel = RouteDeviationLevel.None;
+
+        RawImage    _previewMapImg;
+        AspectRatioFitter _previewMapAspectFitter;
+        Text        _previewDestText;
+        Text        _previewDistText;
 
         Font  _font;
         bool  _built = false;
+        Vector2 _lastScreenPx;
 
         // Cache to restore after search
+        List<(string name, string desc, float dist)> _cachedLocationsExt = new List<(string, string, float)>();
         List<(string name, string desc)> _cachedLocations = new List<(string, string)>();
 
         // ── Public API ───────────────────────────────────────────────────────
@@ -78,23 +117,25 @@ namespace ARLocation.MapboxRoutes.SampleProject
             _font = GetFont();
             BuildCanvas();
             _built = true;
-            if (_minimapImg != null && minimapTexture != null)
-                _minimapImg.texture = minimapTexture;
-
-            // Fallback: show default PIEAS campus locations immediately.
-            // MenuController.Start() will call SetLocationsList() with the full
-            // CampusLocations data shortly after — this just fills the gap.
-            if (_cachedLocations.Count == 0)
+            if (minimapTexture != null)
             {
-                SetLocationsList(new List<(string, string)>
-                {
-                    ("C-Block",         "PIEAS C Block"),
-                    ("D-Block",         "PIEAS D Block"),
-                    ("Central Library", "PIEAS Library"),
-                    ("Auditorium",      "Inaam-ur-Rehman Auditorium"),
-                    ("DNE",             "Dept. of Nuclear Engineering"),
-                });
+                if (_minimapImg != null) _minimapImg.texture = minimapTexture;
+                if (_previewMapImg != null) _previewMapImg.texture = minimapTexture;
             }
+            RefreshNavChromeLayout();
+            RefreshAllMapAspects();
+
+            // Pre-populate with major locations so the list isn't blank on start.
+            // MenuController will refresh this with real distances shortly.
+            SetLocationsList(new List<(string, string)>
+            {
+                ("C-Block",         "PIEAS C Block"),
+                ("D-Block",         "PIEAS D Block"),
+                ("Central Library", "PIEAS Library"),
+                ("Auditorium",      "Inaam-ur-Rehman Auditorium"),
+                ("DNE",             "Dept. of Nuclear Engineering"),
+            });
+            Debug.Log($"[ARNavigationUI] Initialized with {_cachedLocations.Count} locations");
         }
 
         public void ShowSearchScreen()
@@ -102,18 +143,39 @@ namespace ARLocation.MapboxRoutes.SampleProject
             if (!_built) return;
             if (_searchScreen) _searchScreen.SetActive(true);
             if (_navScreen)    _navScreen.SetActive(false);
+            if (_routePreviewScreen) _routePreviewScreen.SetActive(false);
+            RefreshNavChromeLayout();
         }
 
         public void ShowNavScreen()
         {
             if (!_built) return;
             if (_searchScreen) _searchScreen.SetActive(false);
+            if (_routePreviewScreen) _routePreviewScreen.SetActive(false);
             if (_navScreen)    _navScreen.SetActive(true);
+            ClearRouteDeviation();
+            RefreshNavChromeLayout();
+        }
+
+        /// <summary>Show full-route 2D map; user must tap Start before AR overlays run.</summary>
+        public void ShowRoutePreview(string destName, float distMeters)
+        {
+            if (!_built) return;
+            if (_searchScreen) _searchScreen.SetActive(false);
+            if (_navScreen) _navScreen.SetActive(false);
+            if (_routePreviewScreen) _routePreviewScreen.SetActive(true);
+            if (_previewDestText) _previewDestText.text = destName ?? "Destination";
+            if (_previewDistText) _previewDistText.text = FmtDist(distMeters);
+            RefreshAllMapAspects();
+            RefreshNavChromeLayout();
         }
 
         public void SetMinimapTexture(Texture tex)
         {
             if (_minimapImg) _minimapImg.texture = tex;
+            if (_previewMapImg) _previewMapImg.texture = tex;
+            RefreshMinimapLayout();
+            RefreshAllMapAspects();
         }
 
         /// <summary>Populate the campus location cards in the scroll list.</summary>
@@ -134,7 +196,21 @@ namespace ARLocation.MapboxRoutes.SampleProject
         /// <summary>Restore original campus location cards after a search.</summary>
         public void RestoreLocationsList()
         {
-            RebuildList(_cachedLocations, i => OnLocationSelected?.Invoke(i));
+            if (_cachedLocationsExt.Count > 0)
+                RebuildListWithDistance(_cachedLocationsExt, i => OnLocationSelected?.Invoke(i));
+            else
+                RebuildList(_cachedLocations, i => OnLocationSelected?.Invoke(i));
+        }
+
+        /// <summary>Populate the list with distance data (replaces SetLocationsList).</summary>
+        public void SetLocationsListWithDistance(List<(string name, string desc, float distMeters)> locations)
+        {
+            _cachedLocationsExt = locations ?? new List<(string, string, float)>();
+            // Also keep the simple cache in sync
+            _cachedLocations.Clear();
+            foreach (var l in _cachedLocationsExt)
+                _cachedLocations.Add((l.name, l.desc));
+            RebuildListWithDistance(_cachedLocationsExt, i => OnLocationSelected?.Invoke(i));
         }
 
         public void ShowError(string msg)
@@ -158,11 +234,10 @@ namespace ARLocation.MapboxRoutes.SampleProject
         public void UpdateInstruction(string arrow, string instruction, float distToTurnMeters)
         {
             if (!_built) return;
-            if (_arrowText)    _arrowText.text    = arrow;
-            if (_instrText)    _instrText.text    = instruction;
-            if (_instrDistText) _instrDistText.text = distToTurnMeters >= 0
-                ? FmtDist(distToTurnMeters)
-                : "";
+            string distStr = distToTurnMeters >= 0 ? FmtDist(distToTurnMeters) : "";
+            if (_arrowText) _arrowText.text = arrow;
+            if (_instrText) _instrText.text = instruction;
+            if (_instrDistText) _instrDistText.text = distStr;
         }
 
         public void SetDestinationName(string name)
@@ -182,6 +257,67 @@ namespace ARLocation.MapboxRoutes.SampleProject
                                 min < 60   ? $"{Mathf.CeilToInt(min)} min" :
                                              $"{Mathf.FloorToInt(min / 60)}h {Mathf.CeilToInt(min % 60)}m";
             }
+        }
+
+        /// <summary>Status line above End / Re-route (off-route hint, re-route progress).</summary>
+        public void SetGuidanceFooter(string message)
+        {
+            if (!_built || _navGuideFooter == null) return;
+            bool show = !string.IsNullOrEmpty(message);
+            _navGuideFooter.gameObject.SetActive(show);
+            if (show) _navGuideFooter.text = message;
+        }
+
+        public void ClearGuidanceFooter() => SetGuidanceFooter(null);
+
+        /// <summary>Prominent banner when the user leaves the campus route.</summary>
+        public void SetRouteDeviation(RouteDeviationLevel level, float metersOffRoute, bool recalculating)
+        {
+            if (!_built) return;
+            _deviationLevel = level;
+
+            if (_offRouteBanner == null) return;
+
+            if (level == RouteDeviationLevel.None)
+            {
+                _offRouteBanner.SetActive(false);
+                ClearGuidanceFooter();
+                return;
+            }
+
+            _offRouteBanner.SetActive(true);
+
+            if (level == RouteDeviationLevel.Warning)
+            {
+                if (_offRouteTitle) _offRouteTitle.text = "Off route";
+                if (_offRouteDetail)
+                {
+                    string dist = metersOffRoute >= 0 ? FmtDist(metersOffRoute) : "";
+                    _offRouteDetail.text = string.IsNullOrEmpty(dist)
+                        ? "Return to the white arrows on the road, or tap Re-route."
+                        : $"You are {dist} from the path. Head back to the white arrows or tap Re-route.";
+                }
+                SetGuidanceFooter("Off route — follow the arrows back to the road");
+            }
+            else
+            {
+                if (_offRouteTitle) _offRouteTitle.text = recalculating ? "Recalculating…" : "Off route";
+                if (_offRouteDetail)
+                {
+                    _offRouteDetail.text = recalculating
+                        ? "Updating your route for PIEAS campus roads…"
+                        : "You are far from the path. Tap Re-route if this continues.";
+                }
+                SetGuidanceFooter(recalculating ? "Recalculating route…" : "Far off route — tap Re-route");
+            }
+        }
+
+        public void ClearRouteDeviation() => SetRouteDeviation(RouteDeviationLevel.None, -1f, false);
+
+        public void SetRerouteButtonInteractable(bool interactable)
+        {
+            if (_built && _rerouteBtn != null)
+                _rerouteBtn.interactable = interactable;
         }
 
         /// <summary>Show AR state in the small badge on the search screen.</summary>
@@ -206,7 +342,8 @@ namespace ARLocation.MapboxRoutes.SampleProject
 
             _canvas = root.AddComponent<Canvas>();
             _canvas.renderMode   = RenderMode.ScreenSpaceOverlay;
-            _canvas.sortingOrder = 10;
+            _canvas.sortingOrder = 400;  // above AR + world UI so HUD never hides behind the scene
+            _canvas.pixelPerfect = false;
 
             var scaler = root.AddComponent<CanvasScaler>();
             scaler.uiScaleMode         = CanvasScaler.ScaleMode.ScaleWithScreenSize;
@@ -217,7 +354,56 @@ namespace ARLocation.MapboxRoutes.SampleProject
 
             _searchScreen = BuildSearchScreen(root.transform);
             _navScreen    = BuildNavScreen(root.transform);
+            _routePreviewScreen = BuildRoutePreviewScreen(root.transform);
             _navScreen.SetActive(false);
+            _routePreviewScreen.SetActive(false);
+        }
+
+        GameObject BuildRoutePreviewScreen(Transform parent)
+        {
+            var screen = MakePanel(parent, "RoutePreview",
+                new Color(0.07f, 0.075f, 0.082f, 0.98f), 0f, 1f, 0f, 1f);
+
+            MakeTxt(screen.transform, "PrevTitle", "Route overview",
+                TextAnchor.MiddleLeft, 32, C_TextHi, FontStyle.Bold,
+                0.04f, 0.7f, 0.91f, 0.99f);
+            MakeTxt(screen.transform, "PrevSub", "Check the path, then start AR navigation",
+                TextAnchor.MiddleLeft, 22, C_TextLo, FontStyle.Normal,
+                0.04f, 0.95f, 0.86f, 0.905f);
+
+            var mapFrame = MakePanel(screen.transform, "PreviewMapFrame",
+                C_CardBg, 0.04f, 0.96f, 0.30f, 0.84f);
+            AddOutline(mapFrame, new Color(C_Blue.r, C_Blue.g, C_Blue.b, 0.45f), new Vector2(1.5f, 1.5f));
+
+            var imgGo = new GameObject("PreviewMapImg");
+            imgGo.transform.SetParent(mapFrame.transform, false);
+            var imgRt = imgGo.AddComponent<RectTransform>();
+            imgRt.anchorMin = new Vector2(0.02f, 0.02f);
+            imgRt.anchorMax = new Vector2(0.98f, 0.98f);
+            imgRt.offsetMin = imgRt.offsetMax = Vector2.zero;
+            _previewMapImg = imgGo.AddComponent<RawImage>();
+            _previewMapImg.color = Color.white;
+            _previewMapImg.raycastTarget = false;
+            _previewMapAspectFitter = imgGo.AddComponent<AspectRatioFitter>();
+            _previewMapAspectFitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+            _previewMapAspectFitter.aspectRatio = 1f;
+
+            _previewDestText = MakeTxt(screen.transform, "PrevDest", "Destination",
+                TextAnchor.MiddleLeft, 34, C_TextHi, FontStyle.Bold,
+                0.06f, 0.94f, 0.20f, 0.28f);
+            _previewDistText = MakeTxt(screen.transform, "PrevDist", "--",
+                TextAnchor.MiddleLeft, 26, C_Blue, FontStyle.Normal,
+                0.06f, 0.94f, 0.125f, 0.195f);
+
+            var startBtn = MakeBtn(screen.transform, "StartARBtn", "▶  Start AR navigation",
+                C_Green, Color.white, 30, 0.06f, 0.94f, 0.045f, 0.115f);
+            startBtn.onClick.AddListener(() => OnStartARNavigation?.Invoke());
+
+            var backBtn = MakeBtn(screen.transform, "PreviewBackBtn", "←  Back to search",
+                new Color(0.28f, 0.30f, 0.34f, 1f), C_TextHi, 24, 0.06f, 0.94f, 0.005f, 0.038f);
+            backBtn.onClick.AddListener(() => OnCancelRoutePreview?.Invoke());
+
+            return screen;
         }
 
         // ── Search Screen ────────────────────────────────────────────────────
@@ -301,6 +487,7 @@ namespace ARLocation.MapboxRoutes.SampleProject
             _searchInput.textComponent = tx;
             _searchInput.caretColor    = C_Blue;
             _searchInput.caretBlinkRate = 0.85f;
+            _searchInput.onValueChanged.AddListener(OnSearchInputChanged);
 
             // SEARCH button (fixed 180 px)
             var sbGo  = new GameObject("SearchBtn");
@@ -358,87 +545,207 @@ namespace ARLocation.MapboxRoutes.SampleProject
         {
             var screen = MakePanel(parent, "NavScreen", Color.clear, 0, 1, 0, 1);
 
-            // ─ Instruction Banner (top 15%) ─
-            var banner = MakePanel(screen.transform, "Banner", C_PanelBg, 0, 1, 0.85f, 1f);
-            AddOutline(banner, new Color(0, 0, 0, 0.5f), new Vector2(0, -2));
+            // ─ Instruction Banner (compact top strip — final anchors from ApplySafeAreaToNavChrome) ─
+            var banner = MakePanel(screen.transform, "Banner", C_PanelBg, 0, 1, 0.88f, 1f);
+            _navBannerRt = banner.GetComponent<RectTransform>();
 
-            // Large turn arrow on the left
             _arrowText = MakeTxt(banner.transform, "Arrow", "↑",
-                TextAnchor.MiddleCenter, 80, C_Blue, FontStyle.Bold,
-                0f, 0.20f, 0f, 1f);
+                TextAnchor.MiddleCenter, 54, C_Blue, FontStyle.Bold,
+                0f, 0.14f, 0f, 1f);
 
-            // Vertical divider between arrow and text
-            MakePanel(banner.transform, "VDiv", C_Divider, 0.20f, 0.204f, 0.08f, 0.92f);
+            MakePanel(banner.transform, "VDiv", C_Divider, 0.14f, 0.145f, 0.10f, 0.90f);
 
-            // Main instruction text (upper half of banner)
-            _instrText = MakeTxt(banner.transform, "InstrTxt", "Follow the AR path",
-                TextAnchor.MiddleLeft, 34, C_TextHi, FontStyle.Bold,
-                0.22f, 0.97f, 0.42f, 1f);
+            var instrClip = new GameObject("InstrClip", typeof(RectTransform));
+            instrClip.transform.SetParent(banner.transform, false);
+            var clipRt = instrClip.GetComponent<RectTransform>();
+            clipRt.anchorMin = new Vector2(0.16f, 0.40f);
+            clipRt.anchorMax = new Vector2(0.98f, 1f);
+            clipRt.offsetMin = clipRt.offsetMax = Vector2.zero;
+            instrClip.AddComponent<RectMask2D>();
+
+            _instrText = MakeTxt(instrClip.transform, "InstrTxt", "Follow the AR path",
+                TextAnchor.UpperLeft, 26, C_TextHi, FontStyle.Bold,
+                0f, 1f, 0f, 1f);
             _instrText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            _instrText.verticalOverflow = VerticalWrapMode.Truncate;
 
-            // Distance to next turn (lower half of banner)
             _instrDistText = MakeTxt(banner.transform, "InstrDist", "",
-                TextAnchor.MiddleLeft, 28, C_Blue, FontStyle.Normal,
-                0.22f, 0.97f, 0f, 0.42f);
+                TextAnchor.MiddleLeft, 20, C_Blue, FontStyle.Normal,
+                0.16f, 0.98f, 0f, 0.38f);
 
-            // ─ Bottom Navigation Card (bottom 30%) ─
-            var card = MakePanel(screen.transform, "NavCard", C_CardBg, 0, 1, 0f, 0.30f);
+            // Off-route alert (center of screen, above minimap)
+            _offRouteBanner = MakePanel(screen.transform, "OffRouteBanner",
+                new Color(0.55f, 0.18f, 0.12f, 0.94f), 0.05f, 0.95f, 0.52f, 0.62f);
+            AddOutline(_offRouteBanner, C_Red, new Vector2(2f, 2f));
+            _offRouteTitle = MakeTxt(_offRouteBanner.transform, "OffTitle", "Off route",
+                TextAnchor.UpperLeft, 28, Color.white, FontStyle.Bold,
+                0.05f, 0.95f, 0.48f, 0.95f);
+            _offRouteDetail = MakeTxt(_offRouteBanner.transform, "OffDetail", "",
+                TextAnchor.UpperLeft, 20, new Color(1f, 0.9f, 0.85f), FontStyle.Normal,
+                0.05f, 0.95f, 0.08f, 0.46f);
+            _offRouteDetail.horizontalOverflow = HorizontalWrapMode.Wrap;
+            _offRouteBanner.SetActive(false);
+
+            // ─ Bottom Navigation Card (compact) ─
+            var card = MakePanel(screen.transform, "NavCard", C_CardBg, 0, 1, 0f, 0.22f);
+            _navCardRt = card.GetComponent<RectTransform>();
             AddOutline(card, new Color(1, 1, 1, 0.06f), new Vector2(0, 2));
 
             // Blue accent strip at top of card
             MakePanel(card.transform, "BlueAccent", C_Blue, 0f, 1f, 0.985f, 1f);
 
-            // Destination name
             _destText = MakeTxt(card.transform, "DestName", "Destination",
-                TextAnchor.UpperLeft, 38, C_TextHi, FontStyle.Bold,
-                0.04f, 0.96f, 0.64f, 0.97f);
+                TextAnchor.UpperLeft, 30, C_TextHi, FontStyle.Bold,
+                0.05f, 0.95f, 0.56f, 0.90f);
 
-            // Distance remaining
             _distText = MakeTxt(card.transform, "DistRemain", "-- m",
-                TextAnchor.MiddleLeft, 30, C_Blue, FontStyle.Normal,
-                0.04f, 0.52f, 0.38f, 0.63f);
+                TextAnchor.MiddleLeft, 24, C_Blue, FontStyle.Normal,
+                0.05f, 0.48f, 0.34f, 0.52f);
 
-            // ETA
             _etaText = MakeTxt(card.transform, "ETA", "-- min",
-                TextAnchor.MiddleRight, 26, C_TextLo, FontStyle.Normal,
-                0.52f, 0.96f, 0.38f, 0.63f);
+                TextAnchor.MiddleRight, 22, C_TextLo, FontStyle.Normal,
+                0.48f, 0.95f, 0.34f, 0.52f);
 
-            // Horizontal divider
-            MakePanel(card.transform, "HDiv", C_Divider, 0.04f, 0.96f, 0.35f, 0.358f);
+            _navGuideFooter = MakeTxt(card.transform, "GuideFooter", "",
+                TextAnchor.MiddleLeft, 16, new Color(1f, 0.72f, 0.35f, 1f), FontStyle.Normal,
+                0.05f, 0.95f, 0.20f, 0.32f);
+            _navGuideFooter.horizontalOverflow = HorizontalWrapMode.Wrap;
+            _navGuideFooter.verticalOverflow = VerticalWrapMode.Truncate;
+            _navGuideFooter.gameObject.SetActive(false);
 
-            // End Navigation button
-            var endBtn = MakeBtn(card.transform, "EndNavBtn", "✕   End Navigation",
-                C_Red, Color.white, 28, 0.04f, 0.96f, 0.04f, 0.32f);
+            MakePanel(card.transform, "HDiv", C_Divider, 0.05f, 0.95f, 0.188f, 0.195f);
+
+            _rerouteBtn = MakeBtn(card.transform, "RerouteBtn", "↻  Re-route",
+                C_Green, Color.white, 18, 0.05f, 0.47f, 0.04f, 0.175f);
+            _rerouteBtn.onClick.AddListener(() => OnRerouteRequested?.Invoke());
+
+            var endBtn = MakeBtn(card.transform, "EndNavBtn", "✕  End navigation",
+                C_Red, Color.white, 20, 0.53f, 0.95f, 0.04f, 0.175f);
             endBtn.onClick.AddListener(() => OnEndNavigation?.Invoke());
 
-            // ─ Minimap PIP (bottom-left, overlaps AR view + card top) ─
-            // Rendered AFTER card so it draws on top
+            // ─ Minimap PIP: square frame + aspect-correct map (no stretch) ─
             var mm = MakePanel(screen.transform, "Minimap",
-                new Color(0.07f, 0.08f, 0.09f, 0.90f),
-                0f, 0.40f, 0.18f, 0.52f);
-            AddOutline(mm, new Color(C_Blue.r, C_Blue.g, C_Blue.b, 0.5f), new Vector2(1.5f, 1.5f));
+                new Color(0.05f, 0.06f, 0.07f, 0.95f),
+                0f, 0f, 0f, 0f);
+            _minimapPanelRt = mm.GetComponent<RectTransform>();
+            _minimapPanelRt.anchorMin = Vector2.zero;
+            _minimapPanelRt.anchorMax = Vector2.zero;
+            _minimapPanelRt.pivot = new Vector2(0f, 0f);
+            _minimapPanelRt.sizeDelta = new Vector2(240f, 240f);
+            _minimapPanelRt.anchoredPosition = new Vector2(14f, 14f);
+            AddOutline(mm, new Color(C_Blue.r, C_Blue.g, C_Blue.b, 0.7f), new Vector2(2f, 2f));
 
-            // "MAP" label top-left
             MakeTxt(mm.transform, "MapLbl", " MAP",
                 TextAnchor.UpperLeft, 18, C_TextLo, FontStyle.Bold,
-                0f, 0.5f, 0.84f, 1f);
+                0f, 0.45f, 0.88f, 1f);
 
-            // Compass indicator top-right
             MakeTxt(mm.transform, "Compass", "N ↑ ",
                 TextAnchor.UpperRight, 18, new Color(1f, 0.82f, 0.2f), FontStyle.Bold,
-                0.5f, 1f, 0.84f, 1f);
+                0.55f, 1f, 0.88f, 1f);
 
-            // RawImage for the Mapbox render texture
             var mmImg = new GameObject("MinimapImg");
             mmImg.transform.SetParent(mm.transform, false);
-            var mmRT = mmImg.AddComponent<RectTransform>();
-            mmRT.anchorMin = new Vector2(0.02f, 0.02f);
-            mmRT.anchorMax = new Vector2(0.98f, 0.84f);
-            mmRT.offsetMin = mmRT.offsetMax = Vector2.zero;
+            _minimapImgRt = mmImg.AddComponent<RectTransform>();
+            _minimapImgRt.anchorMin = new Vector2(0.02f, 0.02f);
+            _minimapImgRt.anchorMax = new Vector2(0.98f, 0.86f);
+            _minimapImgRt.offsetMin = _minimapImgRt.offsetMax = Vector2.zero;
             _minimapImg = mmImg.AddComponent<RawImage>();
             _minimapImg.color = Color.white;
+            _minimapImg.raycastTarget = false;
+            _minimapAspectFitter = mmImg.AddComponent<AspectRatioFitter>();
+            _minimapAspectFitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+            _minimapAspectFitter.aspectRatio = 1f;
 
             return screen;
+        }
+
+        /// <summary>Re-apply safe-area insets + minimap size/aspect after rotation or texture change.</summary>
+        void RefreshNavChromeLayout()
+        {
+            if (!_built || _canvas == null) return;
+            ApplySafeAreaToNavChrome();
+            RefreshMinimapLayout();
+            _lastScreenPx = new Vector2(Screen.width, Screen.height);
+        }
+
+        void ApplySafeAreaToNavChrome()
+        {
+            if (_canvas == null) return;
+
+            float sw = Mathf.Max(1f, Screen.width);
+            float sh = Mathf.Max(1f, Screen.height);
+            Rect safe = Screen.safeArea;
+
+            float nx0 = Mathf.Clamp01(safe.xMin / sw);
+            float nx1 = Mathf.Clamp01(safe.xMax / sw);
+            float ny0 = Mathf.Clamp01(safe.yMin / sh);
+            float ny1 = Mathf.Clamp01(safe.yMax / sh);
+            if (nx1 <= nx0 + 0.01f || ny1 <= ny0 + 0.01f)
+            {
+                nx0 = 0f; nx1 = 1f; ny0 = 0f; ny1 = 1f;
+            }
+
+            const float pad = 8f;
+
+            if (_navBannerRt != null)
+            {
+                _navBannerRt.anchorMin = new Vector2(nx0, Mathf.Lerp(ny0, ny1, 1f - NavTopBand));
+                _navBannerRt.anchorMax = new Vector2(nx1, ny1);
+                _navBannerRt.offsetMin = new Vector2(pad, 0f);
+                _navBannerRt.offsetMax = new Vector2(-pad, -4f);
+            }
+
+            if (_navCardRt != null)
+            {
+                _navCardRt.anchorMin = new Vector2(nx0, ny0);
+                _navCardRt.anchorMax = new Vector2(nx1, Mathf.Lerp(ny0, ny1, NavBottomBand));
+                _navCardRt.offsetMin = new Vector2(pad, Mathf.Max(6f, pad));
+                _navCardRt.offsetMax = new Vector2(-pad, -Mathf.Max(4f, pad * 0.5f));
+            }
+        }
+
+        void RefreshMinimapLayout()
+        {
+            if (_minimapPanelRt == null || _canvas == null) return;
+            var rootRt = _canvas.transform as RectTransform;
+            if (rootRt == null) return;
+
+            float h = rootRt.rect.height;
+            float w = rootRt.rect.width;
+            float side = Mathf.Clamp(Mathf.Min(w, h) * 0.34f, 188f, 360f);
+            _minimapPanelRt.sizeDelta = new Vector2(side, side);
+
+            float sw = Mathf.Max(1f, Screen.width);
+            float sh = Mathf.Max(1f, Screen.height);
+            float nx0 = Screen.safeArea.xMin / sw;
+            float ny0 = Screen.safeArea.yMin / sh;
+            float padX = w * nx0 + 14f;
+            float bottomLift = h * ny0 + h * (NavBottomBand + 0.02f) + 10f;
+            _minimapPanelRt.anchoredPosition = new Vector2(Mathf.Max(12f, padX), bottomLift);
+
+            RefreshAllMapAspects();
+        }
+
+        void RefreshAllMapAspects()
+        {
+            void SetAspect(AspectRatioFitter fit, Texture t)
+            {
+                if (fit == null || t == null) return;
+                fit.aspectRatio = (float)t.width / Mathf.Max(1, t.height);
+            }
+            SetAspect(_minimapAspectFitter, _minimapImg != null ? _minimapImg.texture : null);
+            SetAspect(_previewMapAspectFitter, _previewMapImg != null ? _previewMapImg.texture : null);
+        }
+
+        void LateUpdate()
+        {
+            if (!_built) return;
+            bool chrome = (_navScreen != null && _navScreen.activeSelf)
+                          || (_routePreviewScreen != null && _routePreviewScreen.activeSelf);
+            if (!chrome) return;
+            var px = new Vector2(Screen.width, Screen.height);
+            if ((px - _lastScreenPx).sqrMagnitude > 0.5f)
+                RefreshNavChromeLayout();
         }
 
         // ── List Management ──────────────────────────────────────────────────
@@ -453,6 +760,105 @@ namespace ARLocation.MapboxRoutes.SampleProject
                 CreateListCard(_listContent, items[i].name, items[i].desc,
                     () => onClickIdx?.Invoke(idx));
             }
+        }
+
+        /// <summary>Live filter: called on every keystroke in the search box.</summary>
+        void OnSearchInputChanged(string text)
+        {
+            OnSearchTextChanged?.Invoke(text);
+
+            string q = (text ?? "").Trim().ToLowerInvariant();
+            if (string.IsNullOrEmpty(q))
+            {
+                // Empty query — show all locations (with distances if available)
+                if (_cachedLocationsExt.Count > 0)
+                    RebuildListWithDistance(_cachedLocationsExt, i => OnLocationSelected?.Invoke(i));
+                else
+                    RebuildList(_cachedLocations, i => OnLocationSelected?.Invoke(i));
+                return;
+            }
+
+            // Filter cached locations by name or description
+            var filteredIndices = new List<int>();
+            for (int i = 0; i < _cachedLocations.Count; i++)
+            {
+                if (_cachedLocations[i].name.ToLowerInvariant().Contains(q)
+                 || _cachedLocations[i].desc.ToLowerInvariant().Contains(q))
+                {
+                    filteredIndices.Add(i);
+                }
+            }
+
+            if (filteredIndices.Count > 0)
+            {
+                // Rebuild list with only matching items, mapping clicks to original indices
+                if (!_listContent) return;
+                foreach (Transform c in _listContent) Destroy(c.gameObject);
+                for (int i = 0; i < filteredIndices.Count; i++)
+                {
+                    int origIdx = filteredIndices[i];
+                    string n = _cachedLocations[origIdx].name;
+                    string d = _cachedLocations[origIdx].desc;
+
+                    if (_cachedLocationsExt.Count > origIdx)
+                    {
+                        string icon = GetBuildingIcon(n);
+                        string distLabel = _cachedLocationsExt[origIdx].dist >= 0
+                            ? FmtDist(_cachedLocationsExt[origIdx].dist) : "";
+                        CreateListCardWithDistance(_listContent, n, d, icon, distLabel,
+                            () => OnLocationSelected?.Invoke(origIdx));
+                    }
+                    else
+                    {
+                        CreateListCard(_listContent, n, d,
+                            () => OnLocationSelected?.Invoke(origIdx));
+                    }
+                }
+            }
+            else
+            {
+                // No matches — show "No matching locations" message
+                if (!_listContent) return;
+                foreach (Transform c in _listContent) Destroy(c.gameObject);
+                var noResult = new GameObject("NoResult", typeof(RectTransform));
+                noResult.transform.SetParent(_listContent, false);
+                noResult.GetComponent<RectTransform>().sizeDelta = new Vector2(0, 80);
+                var txt = noResult.AddComponent<Text>();
+                txt.text = $"No locations matching \"{text}\"";
+                txt.font = _font; txt.fontSize = 24;
+                txt.color = C_TextLo; txt.alignment = TextAnchor.MiddleCenter;
+            }
+        }
+
+        /// <summary>Rebuild the list with distance-aware cards.</summary>
+        void RebuildListWithDistance(List<(string name, string desc, float dist)> items, System.Action<int> onClickIdx)
+        {
+            if (!_listContent) return;
+            foreach (Transform c in _listContent) Destroy(c.gameObject);
+            for (int i = 0; i < items.Count; i++)
+            {
+                int idx = i;
+                string icon = GetBuildingIcon(items[i].name);
+                string distLabel = items[i].dist >= 0 ? FmtDist(items[i].dist) : "";
+                CreateListCardWithDistance(_listContent, items[i].name, items[i].desc,
+                    icon, distLabel, () => onClickIdx?.Invoke(idx));
+            }
+            Debug.Log($"[ARNavigationUI] List rebuilt with {items.Count} items");
+        }
+
+        /// <summary>Pick an emoji icon based on location name.</summary>
+        static string GetBuildingIcon(string name)
+        {
+            string n = (name ?? "").ToLowerInvariant();
+            if (n.Contains("library"))       return "📚";
+            if (n.Contains("auditorium"))    return "🎭";
+            if (n.Contains("mosque") || n.Contains("masjid")) return "🕌";
+            if (n.Contains("hostel"))        return "🏨";
+            if (n.Contains("cafeteria") || n.Contains("canteen")) return "🍽️";
+            if (n.Contains("lab"))           return "🔬";
+            if (n.Contains("gate") || n.Contains("entrance")) return "🚪";
+            if (n.Contains("ground") || n.Contains("field") || n.Contains("court")) return "⚽";
+            return "🏢"; // default building icon
         }
 
         void CreateListCard(Transform parent, string name, string desc, Action onClick)
@@ -530,13 +936,98 @@ namespace ARLocation.MapboxRoutes.SampleProject
             div.AddComponent<Image>().color = C_Divider;
         }
 
+        /// <summary>Create a list card with building icon and distance label.</summary>
+        void CreateListCardWithDistance(Transform parent, string name, string desc,
+            string icon, string distLabel, System.Action onClick)
+        {
+            var card = new GameObject($"Card_{name}");
+            card.transform.SetParent(parent, false);
+            var rt = card.AddComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(0, 92);
+
+            var bg = card.AddComponent<Image>();
+            bg.color = C_RowBg;
+
+            var btn = card.AddComponent<Button>();
+            var cols = btn.colors;
+            cols.normalColor      = C_RowBg;
+            cols.highlightedColor = new Color(0.22f, 0.24f, 0.27f, 1f);
+            cols.pressedColor     = new Color(C_Blue.r, C_Blue.g, C_Blue.b, 0.25f);
+            btn.colors = cols;
+            btn.targetGraphic = bg;
+            btn.onClick.AddListener(() => onClick?.Invoke());
+
+            // Blue left accent strip
+            var strip = new GameObject("Strip");
+            strip.transform.SetParent(card.transform, false);
+            var sRT = strip.AddComponent<RectTransform>();
+            sRT.anchorMin = Vector2.zero; sRT.anchorMax = new Vector2(0f, 1f);
+            sRT.offsetMin = Vector2.zero; sRT.offsetMax = new Vector2(4f, 0f);
+            strip.AddComponent<Image>().color = C_Blue;
+
+            // Building icon background circle
+            var ic = new GameObject("Icon");
+            ic.transform.SetParent(card.transform, false);
+            var icRT = ic.AddComponent<RectTransform>();
+            icRT.anchorMin = new Vector2(0f, 0.5f);
+            icRT.anchorMax = new Vector2(0f, 0.5f);
+            icRT.pivot     = new Vector2(0f, 0.5f);
+            icRT.anchoredPosition = new Vector2(18f, 0f);
+            icRT.sizeDelta        = new Vector2(42f, 42f);
+            ic.AddComponent<Image>().color = new Color(C_Blue.r, C_Blue.g, C_Blue.b, 0.18f);
+
+            // Building type icon inside circle
+            var icTxtGo = new GameObject("IcTxt");
+            icTxtGo.transform.SetParent(ic.transform, false);
+            var icTxtRT = icTxtGo.AddComponent<RectTransform>();
+            icTxtRT.anchorMin = Vector2.zero; icTxtRT.anchorMax = Vector2.one;
+            icTxtRT.offsetMin = icTxtRT.offsetMax = Vector2.zero;
+            var icTxt = icTxtGo.AddComponent<Text>();
+            icTxt.text = icon; icTxt.font = _font;
+            icTxt.alignment = TextAnchor.MiddleCenter; icTxt.fontSize = 20;
+            icTxt.color = C_Blue;
+
+            // Location name
+            MakeTxtOnRT(card.transform, "Name", name,
+                TextAnchor.LowerLeft, 28, C_TextHi, FontStyle.Bold,
+                0.13f, 0.72f, 0.44f, 0.92f);
+
+            // Distance badge (top-right)
+            if (!string.IsNullOrEmpty(distLabel))
+            {
+                MakeTxtOnRT(card.transform, "Dist", distLabel,
+                    TextAnchor.MiddleRight, 20, C_Blue, FontStyle.Bold,
+                    0.72f, 0.88f, 0.50f, 0.92f);
+            }
+
+            // Description
+            MakeTxtOnRT(card.transform, "Desc", desc,
+                TextAnchor.UpperLeft, 20, C_TextLo, FontStyle.Normal,
+                0.13f, 0.88f, 0.08f, 0.44f);
+
+            // Chevron arrow right
+            MakeTxtOnRT(card.transform, "Chevron", "›",
+                TextAnchor.MiddleCenter, 48, C_Blue, FontStyle.Bold,
+                0.88f, 1f, 0f, 1f);
+
+            // Bottom divider
+            var div = new GameObject("Div");
+            div.transform.SetParent(card.transform, false);
+            var divRT = div.AddComponent<RectTransform>();
+            divRT.anchorMin = new Vector2(0.13f, 0f);
+            divRT.anchorMax = new Vector2(1f, 0f);
+            divRT.offsetMin = Vector2.zero;
+            divRT.offsetMax = new Vector2(0f, 1f);
+            div.AddComponent<Image>().color = C_Divider;
+        }
+
         // ── Factory Helpers ──────────────────────────────────────────────────
 
         /// <summary>Create a panel (Image) with anchor-based positioning.</summary>
         GameObject MakePanel(Transform parent, string n, Color col,
             float xMin, float xMax, float yMin, float yMax)
         {
-            var go = new GameObject(n);
+            var go = new GameObject(n, typeof(RectTransform));
             go.transform.SetParent(parent, false);
             RT(go, xMin, xMax, yMin, yMax);
             if (col.a > 0.001f) go.AddComponent<Image>().color = col;
@@ -548,7 +1039,7 @@ namespace ARLocation.MapboxRoutes.SampleProject
             int size, Color col, FontStyle style,
             float xMin, float xMax, float yMin, float yMax)
         {
-            var go = new GameObject(n);
+            var go = new GameObject(n, typeof(RectTransform));
             go.transform.SetParent(parent, false);
             RT(go, xMin, xMax, yMin, yMax);
             return ApplyText(go, content, anchor, size, col, style);
@@ -559,7 +1050,7 @@ namespace ARLocation.MapboxRoutes.SampleProject
             int size, Color col, FontStyle style,
             float xMin, float xMax, float yMin, float yMax)
         {
-            var go = new GameObject(n);
+            var go = new GameObject(n, typeof(RectTransform));
             go.transform.SetParent(parent, false);
             RT(go, xMin, xMax, yMin, yMax);
             ApplyText(go, content, anchor, size, col, style);
@@ -618,13 +1109,13 @@ namespace ARLocation.MapboxRoutes.SampleProject
         InputField MakeInputField(Transform parent,
             float xMin, float xMax, float yMin, float yMax, string placeholder)
         {
-            var go = new GameObject("IF");
+            var go = new GameObject("IF", typeof(RectTransform));
             go.transform.SetParent(parent, false);
             RT(go, xMin, xMax, yMin, yMax);
             go.AddComponent<Image>().color = Color.clear;
 
             // Placeholder
-            var phGo = new GameObject("Ph");
+            var phGo = new GameObject("Ph", typeof(RectTransform));
             phGo.transform.SetParent(go.transform, false);
             RT(phGo, 0f, 1f, 0f, 1f);
             var ph = phGo.AddComponent<Text>();
@@ -634,7 +1125,7 @@ namespace ARLocation.MapboxRoutes.SampleProject
             ph.horizontalOverflow = HorizontalWrapMode.Overflow;
 
             // Input text
-            var tGo = new GameObject("Txt");
+            var tGo = new GameObject("Txt", typeof(RectTransform));
             tGo.transform.SetParent(go.transform, false);
             RT(tGo, 0f, 1f, 0f, 1f);
             var txt = tGo.AddComponent<Text>();
@@ -654,22 +1145,23 @@ namespace ARLocation.MapboxRoutes.SampleProject
         Transform MakeScrollView(Transform parent,
             float xMin, float xMax, float yMin, float yMax)
         {
-            var scrollGo = new GameObject("Scroll");
+            var scrollGo = new GameObject("Scroll", typeof(RectTransform));
             scrollGo.transform.SetParent(parent, false);
             RT(scrollGo, xMin, xMax, yMin, yMax);
             var sr = scrollGo.AddComponent<ScrollRect>();
             sr.horizontal = false;
 
-            var vp = new GameObject("Viewport");
+            var vp = new GameObject("Viewport", typeof(RectTransform));
             vp.transform.SetParent(scrollGo.transform, false);
             RT(vp, 0f, 1f, 0f, 1f);
-            vp.AddComponent<Image>().color = Color.clear;
+            // Use a tiny alpha instead of 0 to ensure the Mask component functions correctly
+            vp.AddComponent<Image>().color = new Color(0, 0, 0, 0.01f); 
             var mask = vp.AddComponent<Mask>();
             mask.showMaskGraphic = false;
 
-            var content = new GameObject("Content");
+            var content = new GameObject("Content", typeof(RectTransform));
             content.transform.SetParent(vp.transform, false);
-            var cRT = content.AddComponent<RectTransform>();
+            var cRT = content.GetComponent<RectTransform>();
             cRT.anchorMin = new Vector2(0f, 1f);
             cRT.anchorMax = new Vector2(1f, 1f);
             cRT.pivot     = new Vector2(0.5f, 1f);
@@ -693,7 +1185,8 @@ namespace ARLocation.MapboxRoutes.SampleProject
 
         static void RT(GameObject go, float xMin, float xMax, float yMin, float yMax)
         {
-            var rt = go.GetComponent<RectTransform>() ?? go.AddComponent<RectTransform>();
+            var rt = go.GetComponent<RectTransform>();
+            if (rt == null) rt = go.AddComponent<RectTransform>();
             rt.anchorMin = new Vector2(xMin, yMin);
             rt.anchorMax = new Vector2(xMax, yMax);
             rt.offsetMin = rt.offsetMax = Vector2.zero;
@@ -714,20 +1207,29 @@ namespace ARLocation.MapboxRoutes.SampleProject
 
         Font GetFont()
         {
-            // Unity 2021+ uses "LegacyRuntime.ttf", older versions use "Arial.ttf"
-            var f = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            // Try common built-in names
+            Font f = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (f == null) f = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            
+            // Last resort: Search all loaded fonts and pick the first one
+            if (f == null)
+            {
+                var allFonts = Resources.FindObjectsOfTypeAll<Font>();
+                if (allFonts.Length > 0) f = allFonts[0];
+            }
+
+            if (f == null) Debug.LogError("[ARNavigationUI] CRITICAL: No Font found in project. UI text will be invisible!");
             return f;
         }
 
         static void EnsureEventSystem()
         {
-            if (FindObjectOfType<EventSystem>() == null)
-            {
-                var esGo = new GameObject("EventSystem");
-                esGo.AddComponent<EventSystem>();
-                esGo.AddComponent<StandaloneInputModule>();
-            }
+            var existing = UnityEngine.Object.FindObjectsByType<EventSystem>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            if (existing != null && existing.Length > 0)
+                return;
+            var esGo = new GameObject("EventSystem");
+            esGo.AddComponent<EventSystem>();
+            esGo.AddComponent<StandaloneInputModule>();
         }
 
         static string FmtDist(float meters)

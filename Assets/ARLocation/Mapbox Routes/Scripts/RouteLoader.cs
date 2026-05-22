@@ -31,14 +31,14 @@ namespace ARLocation.MapboxRoutes
             }
         }
 
-        public IEnumerator LoadRoute(RouteWaypoint start, RouteWaypoint end, Action<string, RouteResponse> callback)
+        public IEnumerator LoadRoute(RouteWaypoint start, RouteWaypoint end, Action<string, RouteResponse> callback, bool requestAlternativeRoutes = false)
         {
-            yield return LoadRoute(start, end);
+            yield return LoadRoute(start, end, requestAlternativeRoutes);
 
             callback?.Invoke(error, result);
         }
 
-        public IEnumerator LoadRoute(RouteWaypoint start, RouteWaypoint end)
+        public IEnumerator LoadRoute(RouteWaypoint start, RouteWaypoint end, bool requestAlternativeRoutes = false)
         {
             Debug.Assert(mapbox != null);
 
@@ -91,7 +91,7 @@ namespace ARLocation.MapboxRoutes
             }
 
             // Query the route from startLocation to endLocation
-            yield return mapbox.QueryRoute(startLocation, endLocation, false, verbose);
+            yield return mapbox.QueryRoute(startLocation, endLocation, requestAlternativeRoutes, verbose);
 
             if (mapbox.errorMessage != null)
             {

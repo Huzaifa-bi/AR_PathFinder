@@ -30,41 +30,21 @@ namespace ARLocation.MapboxRoutes.SampleProject
 
         private void InitializeDefaultLocations()
         {
-            // PIEAS Campus Locations
-            Locations.Add(new CampusLocation
-            {
-                Name = "C-block",
-                Description = "PIEAS C Block",
-                Coordinates = new Vector2d(33.65578597201986, 73.26552018567683)
-            });
+            Locations.Clear();
 
-            Locations.Add(new CampusLocation
-            {
-                Name = "D-block",
-                Description = "PIEAS D Block",
-                Coordinates = new Vector2d(33.65533195716392, 73.26561587673456)
-            });
-
-            Locations.Add(new CampusLocation
-            {
-                Name = "PIEAS Central Library",
-                Description = "Library",
-                Coordinates = new Vector2d(33.6554567451093, 73.26708313965757)
-            });
-
-            Locations.Add(new CampusLocation
-            {
-                Name = "Auditorium",
-                Description = "Inaam-ur-Rehman Auditorium",
-                Coordinates = new Vector2d(33.655887550014555, 73.26772910917398)
-            });
-
-            Locations.Add(new CampusLocation
-            {
-                Name = "DNE",
-                Description = "Department Nuclear Engineering",
-                Coordinates = new Vector2d(33.654431025749346, 73.26334063974608)
-            });
+            // Requested shortlist only (12 places) — coordinates from Google Maps pins
+            Locations.Add(new CampusLocation { Name = "Barrier 3 PIEAS",            Description = "Campus entry barrier",                 Coordinates = new Vector2d(33.656947844635056, 73.27455426852424) });
+            Locations.Add(new CampusLocation { Name = "PIEAS Reception",            Description = "Reception / admin desk",               Coordinates = new Vector2d(33.65676923705645, 73.26622869205573) });
+            Locations.Add(new CampusLocation { Name = "B-Block",                    Description = "Academic Block B",                     Coordinates = new Vector2d(33.65613963961241, 73.26599371555247) });
+            Locations.Add(new CampusLocation { Name = "C-Block",                    Description = "Academic Block C",                     Coordinates = new Vector2d(33.655746595197066, 73.26570472297307) });
+            Locations.Add(new CampusLocation { Name = "Multi purpose Hall PIEAS",   Description = "Multi-purpose hall",                   Coordinates = new Vector2d(33.65336630223781, 73.26943710884538) });
+            Locations.Add(new CampusLocation { Name = "D-Block",                    Description = "Academic Block D",                     Coordinates = new Vector2d(33.655349067679886, 73.26566307382723) });
+            Locations.Add(new CampusLocation { Name = "A-block",                    Description = "Academic / administration block",      Coordinates = new Vector2d(33.65559324212741, 73.2647326531257) });
+            Locations.Add(new CampusLocation { Name = "Auditorium",                 Description = "Inaam-ur-Rehman Auditorium",           Coordinates = new Vector2d(33.6557773477474, 73.2679828659049) });
+            Locations.Add(new CampusLocation { Name = "DNE",                        Description = "Department of Nuclear Engineering",    Coordinates = new Vector2d(33.65444896013717, 73.26342665040356) });
+            Locations.Add(new CampusLocation { Name = "PIEAS Central Library",      Description = "Main campus library",                  Coordinates = new Vector2d(33.65544695614308, 73.26699995573584) });
+            Locations.Add(new CampusLocation { Name = "Computer Center",            Description = "Computer Center",                      Coordinates = new Vector2d(33.65520753418461, 73.26643986560083) });
+            Locations.Add(new CampusLocation { Name = "Cafe PIEAS",                 Description = "Campus cafe / cafeteria",              Coordinates = new Vector2d(33.655072789201384, 73.26576592638742) });
         }
 
         public static CampusLocations Instance => _instance;

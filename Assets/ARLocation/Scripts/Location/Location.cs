@@ -342,7 +342,7 @@ namespace ARLocation
 
         public static double RadToDeg(double rad)
         {
-            return (180.0 * Math.PI) * rad;
+            return (180.0 / Math.PI) * rad;
         }
 
         public static double DegToRad(double deg)

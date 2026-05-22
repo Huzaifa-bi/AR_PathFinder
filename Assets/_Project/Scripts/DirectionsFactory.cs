@@ -52,6 +52,12 @@ namespace ARLocation.MapboxRoutes.SampleProject
 			{
 				_map = FindObjectOfType<AbstractMap>();
 			}
+			if (_map == null)
+			{
+				Debug.LogError("[DirectionsFactory] No AbstractMap found; disabling.");
+				enabled = false;
+				return;
+			}
 			_directions = MapboxAccess.Instance.Directions;
 			_map.OnInitialized += Query;
 			_map.OnUpdated += Query;
@@ -59,6 +65,31 @@ namespace ARLocation.MapboxRoutes.SampleProject
 
 		public void Start()
 		{ //In the `Start` method, waypoints' initial positions are cached, mesh modifiers are initialized, and a coroutine for the directions query timer is started.
+			if (_waypoints == null || _waypoints.Length < 2)
+			{
+				Debug.LogError("[DirectionsFactory] Assign at least two waypoint transforms.");
+				if (_map != null)
+				{
+					_map.OnInitialized -= Query;
+					_map.OnUpdated -= Query;
+				}
+				enabled = false;
+				return;
+			}
+			for (int i = 0; i < _waypoints.Length; i++)
+			{
+				if (_waypoints[i] == null)
+				{
+					Debug.LogError($"[DirectionsFactory] Waypoint at index {i} is null.");
+					if (_map != null)
+					{
+						_map.OnInitialized -= Query;
+						_map.OnUpdated -= Query;
+					}
+					enabled = false;
+					return;
+				}
+			}
 			_cachedWaypoints = new List<Vector3>(_waypoints.Length);
 			foreach (var item in _waypoints)
 			{
@@ -76,12 +107,18 @@ namespace ARLocation.MapboxRoutes.SampleProject
 
 		protected virtual void OnDestroy()
 		{
-			_map.OnInitialized -= Query;
-			_map.OnUpdated -= Query;
+			if (_map != null)
+			{
+				_map.OnInitialized -= Query;
+				_map.OnUpdated -= Query;
+			}
 		}
 
 		void Query()
 		{ //   - The `Query` method constructs a `DirectionResource` based on the waypoints' geo positions and queries directions from Mapbox's Directions API.
+			if (_map == null || _waypoints == null || _waypoints.Length < 2) return;
+			for (int i = 0; i < _waypoints.Length; i++)
+				if (_waypoints[i] == null) return;
 			var count = _waypoints.Length;
 			var wp = new Vector2d[count];
 			for (int i = 0; i < count; i++)
@@ -98,8 +135,11 @@ namespace ARLocation.MapboxRoutes.SampleProject
 			while (true)
 			{
 				yield return new WaitForSeconds(UpdateFrequency);
+				if (_waypoints == null || _cachedWaypoints == null || _waypoints.Length != _cachedWaypoints.Count)
+					continue;
 				for (int i = 0; i < _waypoints.Length; i++)
 				{
+					if (_waypoints[i] == null) continue;
 					if (_waypoints[i].position != _cachedWaypoints[i])
 					{
 						_recalculateNext = true;
@@ -167,6 +207,9 @@ namespace ARLocation.MapboxRoutes.SampleProject
 			}
 
 			mesh.RecalculateNormals();
+            // CRITICAL: Prevent the route line from disappearing when camera is close
+            // by using a very large bounding box so Unity doesn't cull it.
+            mesh.bounds = new Bounds(Vector3.zero, Vector3.one * 500f); 
 			_directionsGO.AddComponent<MeshRenderer>().material = _material;
 			return _directionsGO;
 		}

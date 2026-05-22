@@ -66,6 +66,28 @@ namespace ARLocation.MapboxRoutes
 
             return result;
         }
+
+        /// <summary>
+        /// When the Directions API returns multiple routes (alternatives=true), keep only the shortest by <see cref="Route.distance"/>.
+        /// </summary>
+        public void KeepShortestRouteOnly()
+        {
+            if (routes == null || routes.Count <= 1) return;
+
+            Route best = routes[0];
+            float bestDist = best.distance;
+            for (int i = 1; i < routes.Count; i++)
+            {
+                if (routes[i] != null && routes[i].distance < bestDist)
+                {
+                    bestDist = routes[i].distance;
+                    best = routes[i];
+                }
+            }
+
+            routes.Clear();
+            routes.Add(best);
+        }
     }
 
     [Serializable]

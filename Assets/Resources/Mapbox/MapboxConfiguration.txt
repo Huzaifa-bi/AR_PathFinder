@@ -1,1 +1,1 @@
-{"AccessToken":"YOUR_MAPBOX_TOKEN","MemoryCacheSize":500,"FileCacheSize":3000,"DefaultTimeout":30,"AutoRefreshCache":true}
+{"AccessToken":"YOUR_MAPBOX_TOKEN_HERE","MemoryCacheSize":500,"FileCacheSize":3000,"DefaultTimeout":30,"AutoRefreshCache":true}

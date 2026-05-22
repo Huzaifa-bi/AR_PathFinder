@@ -51,15 +51,17 @@ namespace ARLocation.MapboxRoutes.SampleProject
             // Find the user indicator (should be an independent object in scene, not a child)
             if (userIndicator == null)
             {
-                // Try to find it by name or type
-                userIndicator = FindObjectOfType<Transform>();
-                if (userIndicator != null && userIndicator.name.Contains("User"))
+                foreach (var t in FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 {
-                    Debug.Log($"[TestCameraController] Found user indicator: {userIndicator.name}");
+                    if (t != null && t.name.IndexOf("User", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        userIndicator = t;
+                        Debug.Log($"[TestCameraController] Found user indicator: {userIndicator.name}");
+                        break;
+                    }
                 }
-                else
+                if (userIndicator == null)
                 {
-                    // If still not found, try to find the first child that's not the camera
                     foreach (Transform child in transform.parent != null ? transform.parent : transform)
                     {
                         if (child != transform)
@@ -141,7 +143,7 @@ namespace ARLocation.MapboxRoutes.SampleProject
 
         private void HandleGPSMovement()
         {
-            if (userIndicator == null) return;
+            if (userIndicator == null || map == null) return;
             if (ARLocationProvider.Instance == null || !ARLocationProvider.Instance.IsEnabled) return;
 
             // 1. POSITION (GPS to World on Map)
@@ -235,6 +237,7 @@ namespace ARLocation.MapboxRoutes.SampleProject
                         return;
                     }
 
+                    if (ARLocationProvider.Instance == null) return;
                     // Calculate distance using ARLocation's accurate horizontal math
                     var currentLocation = ARLocationProvider.Instance.CurrentLocation.ToLocation();
                     double distance = Location.HorizontalDistance(currentLocation, destinationLoc);

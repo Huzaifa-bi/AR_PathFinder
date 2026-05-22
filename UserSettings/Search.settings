@@ -9,7 +9,7 @@ onBoardingDoNotAskAgain = true
 showPackageIndexes = false
 showStatusBar = false
 scopes = {
-	"last_search.66F56946" = "canvas"
+	"last_search.66F56946" = "animated"
 	"OpenInspectorPreview.66F56946" = "0"
 	"currentGroup.66F56946" = "scene"
 }
@@ -63,6 +63,7 @@ providers = {
 objectSelectors = {
 }
 recentSearches = [
+	""
 ]
 searchItemFavorites = [
 ]

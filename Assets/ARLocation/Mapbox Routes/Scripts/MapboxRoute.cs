@@ -64,6 +64,9 @@ namespace ARLocation.MapboxRoutes
             [Tooltip("The assumed height of the device from the ground.")]
             public float GroundHeight = 1.4f;
 
+            [Tooltip("When false, 3D signposts / floating arrows are not updated (use screen UI + ground chevrons instead).")]
+            public bool EnableSignpostBehaviour = false;
+
             [Header("Events")]
             [Tooltip("Event listener called whenever there is an error loading a route.")]
             public MapboxRouteLoadErrorEvent OnMapboxRouteLoadError;
@@ -159,21 +162,23 @@ namespace ARLocation.MapboxRoutes
             {
                 bool shouldGotoNextTarget = false;
 
-                for (int i = 0; i < NumberOfSteps; i++)
+                if (Settings.EnableSignpostBehaviour)
                 {
-                    var signpostInstances = s.SignPostInstances[i];
-                    var signpostEventArgs = createSignPostEventArgs(i);
-                    for (int j = 0; j < signpostInstances.Count; j++)
+                    for (int i = 0; i < NumberOfSteps; i++)
                     {
-                        var instance = signpostInstances[j];
-                        var result = instance.UpdateSignPost(signpostEventArgs);
-                        if (i == s.CurrentTargetIndex && !result)
+                        var signpostInstances = s.SignPostInstances[i];
+                        var signpostEventArgs = createSignPostEventArgs(i);
+                        for (int j = 0; j < signpostInstances.Count; j++)
                         {
-                            Utils.Logger.LogFromMethod("MapboxRoute", "Update", "NextTarget", Settings.DebugMode);
-                            shouldGotoNextTarget = true;
+                            var instance = signpostInstances[j];
+                            var result = instance.UpdateSignPost(signpostEventArgs);
+                            if (i == s.CurrentTargetIndex && !result)
+                            {
+                                Utils.Logger.LogFromMethod("MapboxRoute", "Update", "NextTarget", Settings.DebugMode);
+                                shouldGotoNextTarget = true;
+                            }
                         }
                     }
-
                 }
 
                 if (shouldGotoNextTarget)
@@ -181,12 +186,9 @@ namespace ARLocation.MapboxRoutes
                     NextTarget();
                 }
 
-                if (Settings.PathRenderer != null)
-                {
-                    Settings.PathRenderer.OnRouteUpdate(createRoutePathRendererArgs());
-                }
+                // Ground path is drawn by ARGuidanceSystem. Legacy LineRenderer paths draw a black bar in AR.
 
-                if (Settings.OnScreenIndicator != null)
+                if (Settings.OnScreenIndicator != null && Settings.OnScreenIndicator.isActiveAndEnabled)
                 {
                     Settings.OnScreenIndicator.OnRouteUpdate(createSignPostEventArgs(s.CurrentTargetIndex));
                 }
@@ -245,6 +247,64 @@ namespace ARLocation.MapboxRoutes
                     StartCoroutine(LoadRoute());
                 }
             }
+        }
+
+        /// <summary>Removes maneuver objects and route geometry from the scene (e.g. when user ends navigation).</summary>
+        public void ClearBuiltRoute()
+        {
+            clearRoute();
+        }
+
+        /// <summary>Hide legacy 3D signpost / arrow objects (screen UI + ground path used instead).</summary>
+        public void HideAllSignposts()
+        {
+            foreach (var list in s.SignPostInstances)
+            {
+                foreach (var sp in list)
+                {
+                    if (sp != null)
+                        sp.gameObject.SetActive(false);
+                }
+            }
+        }
+
+        /// <summary>Disable legacy line renderers; optionally keep 3D signposts + GPS anchors active.</summary>
+        public void SuppressLegacyArObjects(bool enableSignposts)
+        {
+            if (!enableSignposts)
+                HideAllSignposts();
+
+            foreach (var place in s.StepsPlaceAtInstances)
+            {
+                if (place != null)
+                    place.gameObject.SetActive(enableSignposts);
+            }
+
+            if (Settings.OnScreenIndicator != null)
+                Settings.OnScreenIndicator.enabled = false;
+            if (Settings.PathRenderer != null)
+                Settings.PathRenderer.enabled = false;
+        }
+
+        public void PrepareSignpostsForNavigation()
+        {
+            Settings.EnableSignpostBehaviour = true;
+            foreach (var list in s.SignPostInstances)
+            {
+                foreach (var sp in list)
+                {
+                    if (sp != null)
+                        sp.gameObject.SetActive(true);
+                }
+            }
+        }
+
+        /// <summary>Re-apply path renderer after enabling the renderer component (Init must run while objects exist).</summary>
+        public void RefreshPathRenderer()
+        {
+            if (Settings.PathRenderer == null || s.RouteGeometry == null || s.RouteSteps == null || s.RouteSteps.Count == 0)
+                return;
+            Settings.PathRenderer.Init(createRoutePathRendererArgs());
         }
 
         private void clearRoute()

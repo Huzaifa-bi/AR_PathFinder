@@ -42,3 +42,7 @@
 .DS_Store*
 Thumbs.db
 Icon?
+
+# Secrets (API tokens — do not commit)
+Assets/StreamingAssets/Secrets.json
+Assets/StreamingAssets/Secrets.json.meta

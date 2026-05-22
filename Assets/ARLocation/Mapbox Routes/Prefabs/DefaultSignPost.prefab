@@ -112,7 +112,7 @@ MeshRenderer:
   m_Enabled: 1
   m_CastShadows: 0
   m_ReceiveShadows: 0
-  m_DynamicOccludee: 1
+  m_DynamicOccludee: 0
   m_MotionVectors: 1
   m_LightProbeUsage: 1
   m_ReflectionProbeUsage: 1
@@ -140,7 +140,7 @@ MeshRenderer:
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 100
 --- !u!222 &1626456414927175321
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -177,8 +177,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
-  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
+    rgba: 4281545523
+  m_fontColor: {r: 0.08, g: 0.09, b: 0.14, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -194,7 +194,7 @@ MonoBehaviour:
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
-    rgba: 4294967295
+    rgba: 4281545523
   m_fontSize: 1.95
   m_fontSizeBase: 1.4
   m_fontWeight: 400
@@ -239,7 +239,7 @@ MonoBehaviour:
   m_maskType: 0
   _SortingLayer: 0
   _SortingLayerID: 0
-  _SortingOrder: 0
+  _SortingOrder: 100
 --- !u!1 &5874874154042612432
 GameObject:
   m_ObjectHideFlags: 0
@@ -288,7 +288,7 @@ MeshRenderer:
   m_Enabled: 1
   m_CastShadows: 0
   m_ReceiveShadows: 0
-  m_DynamicOccludee: 1
+  m_DynamicOccludee: 0
   m_MotionVectors: 1
   m_LightProbeUsage: 1
   m_ReflectionProbeUsage: 1
@@ -316,7 +316,7 @@ MeshRenderer:
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 100
 --- !u!222 &5083532830240740086
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -353,8 +353,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
-  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
+    rgba: 4281545523
+  m_fontColor: {r: 0.08, g: 0.09, b: 0.14, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -370,7 +370,7 @@ MonoBehaviour:
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
-    rgba: 4294967295
+    rgba: 4281545523
   m_fontSize: 4.65
   m_fontSizeBase: 1.4
   m_fontWeight: 400
@@ -415,7 +415,7 @@ MonoBehaviour:
   m_maskType: 0
   _SortingLayer: 0
   _SortingLayerID: 0
-  _SortingOrder: 0
+  _SortingOrder: 100
 --- !u!1 &5929591857152066985
 GameObject:
   m_ObjectHideFlags: 0

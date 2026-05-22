@@ -21,18 +21,36 @@ namespace ARLocation
 
         public void Init(LocationPath path, LineRenderer renderer)
         {
+            Shutdown();
             Path = path;
             lineRenderer = renderer;
+            if (lineRenderer == null || Path == null) return;
 
             arLocationRoot = ARLocationManager.Instance.gameObject.transform;
 
             initialized = true;
+            updateCount = 0;
 
             locationProvider = ARLocationProvider.Instance;
             locationProvider.OnLocationUpdatedDelegate += locationUpdatedHandler;
             if (locationProvider.IsEnabled) {
                 locationUpdatedHandler(locationProvider.CurrentLocation, locationProvider.CurrentLocation);
             }
+        }
+
+        public void Shutdown()
+        {
+            if (locationProvider != null)
+                locationProvider.OnLocationUpdatedDelegate -= locationUpdatedHandler;
+            initialized = false;
+            updateCount = 0;
+            lineRenderer = null;
+            Path = null;
+        }
+
+        void OnDestroy()
+        {
+            Shutdown();
         }
 
         private void locationUpdatedHandler(LocationReading locationReading, LocationReading _)
@@ -66,12 +84,12 @@ namespace ARLocation
 
         void Update()
         {
-            if (!initialized)
-            {
+            if (!initialized || lineRenderer == null || Camera.main == null)
                 return;
-            }
 
-            lineRenderer.gameObject.transform.localPosition = MathUtils.SetY(lineRenderer.gameObject.transform.localPosition, Camera.main.transform.position.y - 1.5f);
+            lineRenderer.gameObject.transform.localPosition = MathUtils.SetY(
+                lineRenderer.gameObject.transform.localPosition,
+                Camera.main.transform.position.y - 1.5f);
         }
 
     }

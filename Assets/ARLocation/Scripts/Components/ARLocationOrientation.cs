@@ -24,7 +24,7 @@ namespace ARLocation
 
         [Tooltip("The maximum number of orientation updates. The updates will be paused after this amount. Zero means there is no limit and " +
         "the updates won't be paused automatically.")]
-        public uint MaxNumberOfUpdates = 4;
+        public uint MaxNumberOfUpdates = 0;
 
 
         /// <summary>
@@ -81,6 +81,10 @@ namespace ARLocation
         private bool isChangingOrientation;
         private Transform mainCameraTransform;
         private bool waitingForARTracking;
+        private bool _navigationFrozen;
+
+        /// <summary>When true, compass no longer rotates the AR+GPS root (stops chevron shake during walk nav).</summary>
+        public void SetNavigationFrozen(bool frozen) => _navigationFrozen = frozen;
 
         /// <summary>
         /// Restarts the orientation tracking.
@@ -130,6 +134,7 @@ namespace ARLocation
         private void OnCompassUpdatedHandler(HeadingReading newHeading, HeadingReading lastReading)
         {
             if (waitingForARTracking) return;
+            if (_navigationFrozen) return;
 
             if (!newHeading.isMagneticHeadingAvailable)
             {
